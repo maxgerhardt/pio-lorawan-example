@@ -1,6 +1,6 @@
 # PlatformIO LoRaWAN example 
 
-A copy of [mbed-os-example-lorawan](https://github.com/ARMmbed/mbed-os-example-lorawan) this is compilable with
+A copy of [mbed-os-example-lorawan](https://github.com/ARMmbed/mbed-os-example-lorawan) that is compilable with
 PlatformIO. 
 
 # Settings 
