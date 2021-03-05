@@ -11,7 +11,7 @@
 |___/ |_/_/ \_\___|_|\_\_| \___/|_|_\\___|___|
 embedded.connectivity.solutions===============
 
-Description: LoRaWAN stack layer that controls both MAC and PHY underneath
+Description: Radio driver for Semtech SX1272 radio. Implements LoRaRadio class.
 
 License: Revised BSD License, see LICENSE.TXT file include in the project
 
@@ -23,8 +23,8 @@ Copyright (c) 2017, Arm Limited and affiliates.
 SPDX-License-Identifier: BSD-3-Clause
 */
 
-#ifndef SX1276_LORARADIO_H_
-#define SX1276_LORARADIO_H_
+#ifndef SX1272_LORARADIO_H_
+#define SX1272_LORARADIO_H_
 
 #include "PinNames.h"
 #include "InterruptIn.h"
@@ -33,15 +33,15 @@ SPDX-License-Identifier: BSD-3-Clause
 #include "SPI.h"
 #include "platform/PlatformMutex.h"
 #ifdef MBED_CONF_RTOS_PRESENT
- #include "rtos/Thread.h"
+#include "rtos/Thread.h"
 #endif
 
 #include "lorawan/LoRaRadio.h"
 
-#ifdef MBED_CONF_SX1276_LORA_DRIVER_BUFFER_SIZE
-#define MAX_DATA_BUFFER_SIZE_SX1276                        MBED_CONF_SX1276_LORA_DRIVER_BUFFER_SIZE
+#ifdef MBED_CONF_SX1272_LORA_DRIVER_BUFFER_SIZE
+#define MAX_DATA_BUFFER_SIZE_SX172                        MBED_CONF_SX1272_LORA_DRIVER_BUFFER_SIZE
 #else
-#define MAX_DATA_BUFFER_SIZE_SX1276                        255
+#define MAX_DATA_BUFFER_SIZE_SX172                        255
 #endif
 
 #if DEVICE_LPTICKER
@@ -56,29 +56,14 @@ SPDX-License-Identifier: BSD-3-Clause
  * Radio driver implementation for Semtech SX1272 plus variants.
  * Supports only SPI at the moment. Implements pure virtual LoRaRadio class.
  */
-class SX1276_LoRaRadio: public LoRaRadio {
+class SX1272_LoRaRadio: public LoRaRadio {
 public:
     /**
      * Use this constructor if pin definitions are provided manually.
      * The pins that are marked NC are optional. It is assumed that these
      * pins are not connected until/unless configured otherwise.
-     *
-     * Note: Pin ant_switch is equivalent to RxTx pin at
-     * https://developer.mbed.org/components/SX1276MB1xAS/.
-     * Reading the state of this pin indicates if the radio module type is
-     * SX1276MB1LAS(North American frequency band supported) or SX1276MAS
-     * (European frequency band supported).
-     * Pin dio4 can be mapped to multiple pins on the board, please refer to
-     * schematic of your board. For reference look at
-     * https://developer.mbed.org/components/SX1276MB1xAS/
-     *
-     * Most of the radio module control pins are not being used at the moment as
-     * the SX1276MB1xAS shield has not connected them. For consistency and future
-     * use we are leaving the pins in the constructor. For example, if in some
-     * setting SX1276 radio module gets connected to an external power amplifier
-     * or radio  latch controls are connected.
      */
-    SX1276_LoRaRadio(PinName mosi,
+    SX1272_LoRaRadio(PinName mosi,
                      PinName miso,
                      PinName sclk,
                      PinName nss,
@@ -100,7 +85,7 @@ public:
     /**
      * Destructor
      */
-    virtual ~SX1276_LoRaRadio();
+    virtual ~SX1272_LoRaRadio();
 
     /**
      * Registers radio events with the Mbed LoRaWAN stack and
@@ -160,7 +145,7 @@ public:
      *  @param rx_continuous Sets the reception in continuous mode
      *                          [false: single mode, true: continuous mode]
      */
-    virtual void set_rx_config (radio_modems_t modem, uint32_t bandwidth,
+    virtual void set_rx_config(radio_modems_t modem, uint32_t bandwidth,
                                uint32_t datarate, uint8_t coderate,
                                uint32_t bandwidth_afc, uint16_t preamble_len,
                                uint16_t symb_timeout, bool fix_len,
@@ -198,10 +183,10 @@ public:
      *  @param timeout       Transmission timeout [ms]
      */
     virtual void set_tx_config(radio_modems_t modem, int8_t power, uint32_t fdev,
-                              uint32_t bandwidth, uint32_t datarate,
-                              uint8_t coderate, uint16_t preamble_len,
-                              bool fix_len, bool crc_on, bool freq_hop_on,
-                              uint8_t hop_period, bool iq_inverted, uint32_t timeout);
+                               uint32_t bandwidth, uint32_t datarate,
+                               uint8_t coderate, uint16_t preamble_len,
+                               bool fix_len, bool crc_on, bool freq_hop_on,
+                               uint8_t hop_period, bool iq_inverted, uint32_t timeout);
 
     /**
      *  Sends the buffer of size
@@ -225,7 +210,7 @@ public:
     /**
      * Sets the radio to receive
      *
-     * All necessary configuration options for reception are set in
+     * All necessary configuration options for receptions are set in
      * 'set_rx_config(parameters)' API.
      */
     virtual void receive(void);
@@ -383,7 +368,7 @@ private:
     // Data buffer used for both TX and RX
     // Size of this buffer is configurable via Mbed config system
     // Default is 256 bytes
-    uint8_t _data_buffer[MAX_DATA_BUFFER_SIZE_SX1276];
+    uint8_t _data_buffer[MAX_DATA_BUFFER_SIZE_SX172];
 
     // TX timer in ms. This timer is used as a fail safe for TX.
     // If the chip fails to transmit, its a fatal error, reflecting
@@ -401,6 +386,11 @@ private:
 
     uint8_t radio_variant;
 
+    /**
+     * Flag used to set the RF switch control pins in low power mode when the radio is not active.
+     */
+    bool radio_is_active;
+
     // helper functions
     void setup_registers();
     void default_antenna_switch_ctrls();
@@ -409,10 +399,11 @@ private:
     void gpio_init();
     void gpio_deinit();
     void setup_interrupts();
-    void set_operation_mode(uint8_t operation_mode);
-    void set_low_power_mode();
-    void set_sx1276_variant_type();
-    uint8_t get_pa_conf_reg(uint32_t channel);
+    void set_modem(uint8_t modem);
+    void set_operation_mode(uint8_t mode);
+    void set_low_power_mode(bool status);
+    void set_sx1272_variant_type();
+    uint8_t get_pa_conf_reg();
     void set_rf_tx_power(int8_t power);
     int16_t get_rssi(radio_modems_t modem);
     uint8_t get_fsk_bw_reg_val(uint32_t bandwidth);
@@ -424,8 +415,6 @@ private:
     void read_fifo(uint8_t *buffer, uint8_t size);
     void transmit(uint32_t timeout);
     void rf_irq_task(void);
-    void set_modem(uint8_t modem);
-    void rx_chain_calibration(void);
 
     // ISRs
     void  dio0_irq_isr();
@@ -446,4 +435,4 @@ private:
     void handle_timeout_irq();
 };
 
-#endif // SX1276_LORARADIO_H_
+#endif /* SX1272_LORARADIO_H_ */
